@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Questions AI Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Interview Questions AI Generator</h1>
+        <p class="subtitle">Generate thoughtful interview questions for any job role</p>
+
+        <form id="jobForm">
+            <div class="form-group">
+                <label for="jobTitle">Job Title</label>
+                <input 
+                    type="text" 
+                    id="jobTitle" 
+                    name="jobTitle" 
+                    placeholder="e.g., Customer Success Manager"
+                    required
+                >
+            </div>
+            <button type="submit" class="btn-submit">Generate Questions</button>
+        </form>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading-state hidden">
+            <div class="spinner"></div>
+            <p>Generating interview questions...</p>
+        </div>
+
+        <!-- Results Container -->
+        <div id="resultsContainer" class="results-container hidden">
+            <h2>Interview Questions</h2>
+            <div id="questionsList" class="questions-list"></div>
+            <button id="resetBtn" class="btn-reset">Generate New Questions</button>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorContainer" class="error-container hidden">
+            <p id="errorMessage"></p>
+            <button id="errorRetryBtn" class="btn-reset">Try Again</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
