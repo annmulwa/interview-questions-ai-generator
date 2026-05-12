@@ -64,7 +64,13 @@ async function generateQuestions(jobTitle) {
             body: JSON.stringify({ jobTitle })
         });
 
+        const data = await response.json();
+
         if (!response.ok) {
+            // Parse error message from response
+            if (data.error) {
+                throw new Error(data.error);
+            }
             // Check for specific error types
             if (response.status === 401) {
                 throw new Error('Authentication failed.');
@@ -76,8 +82,6 @@ async function generateQuestions(jobTitle) {
                 throw new Error(`Error: ${response.statusText}`);
             }
         }
-
-        const data = await response.json();
 
         if (data.error) {
             throw new Error(data.error);
