@@ -24,6 +24,14 @@ exports.handler = async (event) => {
         // Sanitize input (max 100 chars)
         const sanitizedJobTitle = jobTitle.trim().slice(0, 100);
 
+        // Check if input contains at least one letter (not just numbers/symbols)
+        if (!/[a-zA-Z]/.test(sanitizedJobTitle)) {
+            return {
+                statusCode: 400,
+                body: JSON.stringify({ error: 'Job title must contain at least one letter' })
+            };
+        }
+
         // Get API key from environment variables
         const apiKey = process.env.GEMINI_API_KEY;
 
