@@ -2,8 +2,9 @@
 const API_ENDPOINT = '/.netlify/functions/generateQuestions';
 const SPEECH_ENDPOINT = '/.netlify/functions/generateSpeech';
 
-// Tracks the audio currently playing so starting a new one stops the last one
-let currentAudio = null;
+// Caches generated audio per "Listen" button, keyed by the button element,
+// so pausing/resuming/replaying a question never re-calls the (paid) API
+const audioCache = new Map();
 
 // Get HTML elements
 const jobForm = document.getElementById('jobForm');
@@ -108,8 +109,9 @@ function displayQuestions(questions, jobTitle) {
     // Clear previous questions
     questionsList.innerHTML = '';
 
-    // Stop any audio left over from a previous set of questions
-    stopCurrentAudio();
+    // A fresh set of questions means the old audio (and its cached blobs) is
+    // no longer relevant - stop playback and free the object URLs
+    clearAudioCache();
 
     // Create a question element for each question
     questions.forEach((question, index) => {
@@ -146,18 +148,30 @@ function displayQuestions(questions, jobTitle) {
 }
 
 /**
- * Request speech audio for a question from the Netlify function and play it.
- * Talks to ElevenLabs' Text-to-Speech API through a serverless proxy, the
- * same pattern used for Gemini: the API key never reaches the browser.
+ * Request speech audio for a question (once) and toggle play/pause on
+ * subsequent clicks, using the same audio, so the API is only called once
+ * per question. Talks to ElevenLabs' Text-to-Speech API through a serverless
+ * proxy: the API key never reaches the browser.
  */
 async function playQuestionAudio(questionText, buttonEl) {
-    const originalLabel = buttonEl.textContent;
-    buttonEl.disabled = true;
-    buttonEl.textContent = 'Loading...';
+    // Already generated - just toggle play/pause on the cached audio
+    if (audioCache.has(buttonEl)) {
+        const { audio } = audioCache.get(buttonEl);
+        if (audio.paused) {
+            pauseAllExcept(buttonEl);
+            audio.play();
+            setButtonState(buttonEl, 'playing');
+        } else {
+            audio.pause();
+            setButtonState(buttonEl, 'paused');
+        }
+        return;
+    }
+
+    // First click for this question - fetch audio from the server
+    setButtonState(buttonEl, 'loading');
 
     try {
-        stopCurrentAudio();
-
         const response = await fetch(SPEECH_ENDPOINT, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -178,39 +192,78 @@ async function playQuestionAudio(questionText, buttonEl) {
         const audioBlob = await response.blob();
         const audioUrl = URL.createObjectURL(audioBlob);
         const audio = new Audio(audioUrl);
-        currentAudio = audio;
 
-        buttonEl.textContent = '\u23F8 Playing...';
+        audio.addEventListener('ended', () => setButtonState(buttonEl, 'idle'));
+        audio.addEventListener('pause', () => {
+            // Only reflect "paused" if it didn't just finish naturally
+            if (audio.currentTime > 0 && audio.currentTime < audio.duration) {
+                setButtonState(buttonEl, 'paused');
+            }
+        });
+        audio.addEventListener('play', () => setButtonState(buttonEl, 'playing'));
 
-        const resetButton = () => {
-            buttonEl.textContent = originalLabel;
-            buttonEl.disabled = false;
-            URL.revokeObjectURL(audioUrl);
-            if (currentAudio === audio) currentAudio = null;
-        };
+        audioCache.set(buttonEl, { audio, url: audioUrl });
 
-        audio.addEventListener('ended', resetButton);
-        audio.addEventListener('error', resetButton);
-
+        pauseAllExcept(buttonEl);
         await audio.play();
     } catch (error) {
-        buttonEl.textContent = 'Error - retry';
-        buttonEl.disabled = false;
         console.error('Speech playback error:', error.message);
-        setTimeout(() => {
-            buttonEl.textContent = originalLabel;
-        }, 2500);
+        setButtonState(buttonEl, 'error');
+        setTimeout(() => setButtonState(buttonEl, 'idle'), 2500);
     }
 }
 
 /**
- * Stop and clean up whatever audio is currently playing, if anything
+ * Pause every cached audio except the one tied to keepButton, and reflect
+ * that in each of their button labels
  */
-function stopCurrentAudio() {
-    if (currentAudio) {
-        currentAudio.pause();
-        currentAudio = null;
+function pauseAllExcept(keepButton) {
+    audioCache.forEach(({ audio }, button) => {
+        if (button !== keepButton && !audio.paused) {
+            audio.pause();
+        }
+    });
+}
+
+/**
+ * Update a Listen button's label/disabled state for a given playback state
+ */
+function setButtonState(buttonEl, state) {
+    switch (state) {
+        case 'loading':
+            buttonEl.textContent = 'Loading...';
+            buttonEl.disabled = true;
+            break;
+        case 'playing':
+            buttonEl.textContent = '\u23F8 Pause';
+            buttonEl.disabled = false;
+            break;
+        case 'paused':
+            buttonEl.textContent = '\u25B6 Resume';
+            buttonEl.disabled = false;
+            break;
+        case 'error':
+            buttonEl.textContent = 'Error - retry';
+            buttonEl.disabled = false;
+            break;
+        case 'idle':
+        default:
+            buttonEl.textContent = '\uD83D\uDD0A Listen';
+            buttonEl.disabled = false;
+            break;
     }
+}
+
+/**
+ * Stop all cached audio and release their object URLs - called when a new
+ * set of questions is generated, since the old audio no longer applies
+ */
+function clearAudioCache() {
+    audioCache.forEach(({ audio, url }) => {
+        audio.pause();
+        URL.revokeObjectURL(url);
+    });
+    audioCache.clear();
 }
 
 /**
