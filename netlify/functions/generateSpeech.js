@@ -81,7 +81,8 @@ exports.handler = async (event) => {
         );
 
         if (!response.ok) {
-            console.error(`ElevenLabs API error: ${response.status} ${response.statusText}`);
+            const errorBody = await response.text();
+            console.error(`ElevenLabs API error: ${response.status} ${response.statusText} - ${errorBody}`);
             if (response.status === 401) {
                 return {
                     statusCode: 500,
