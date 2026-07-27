@@ -298,5 +298,6 @@ function hideAll() {
 function resetForm() {
     jobTitleInput.value = '';
     hideAll();
+    clearAudioCache();
     jobTitleInput.focus();
 }
