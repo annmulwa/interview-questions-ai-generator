@@ -175,10 +175,53 @@ input[type="text"]:focus {
     letter-spacing: 0.5px;
 }
 
+.question-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
 .question-item p {
     color: #333;
     font-size: 15px;
     line-height: 1.6;
+    flex: 1;
+}
+
+.btn-listen {
+    flex-shrink: 0;
+    padding: 6px 14px;
+    border: 1.5px solid #667eea;
+    border-radius: 20px;
+    background: white;
+    color: #667eea;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.btn-listen:hover:not(:disabled) {
+    background: #667eea;
+    color: white;
+}
+
+.btn-listen:disabled {
+    opacity: 0.7;
+    cursor: default;
+}
+
+@media (max-width: 600px) {
+    .question-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-listen {
+        align-self: flex-start;
+    }
 }
 
 /* Error State */

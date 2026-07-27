@@ -1,5 +1,9 @@
 // Configuration
 const API_ENDPOINT = '/.netlify/functions/generateQuestions';
+const SPEECH_ENDPOINT = '/.netlify/functions/generateSpeech';
+
+// Tracks the audio currently playing so starting a new one stops the last one
+let currentAudio = null;
 
 // Get HTML elements
 const jobForm = document.getElementById('jobForm');
@@ -104,21 +108,109 @@ function displayQuestions(questions, jobTitle) {
     // Clear previous questions
     questionsList.innerHTML = '';
 
+    // Stop any audio left over from a previous set of questions
+    stopCurrentAudio();
+
     // Create a question element for each question
     questions.forEach((question, index) => {
         const questionItem = document.createElement('div');
         questionItem.className = 'question-item';
 
-        questionItem.innerHTML = `
-            <h3>Question ${index + 1}</h3>
-            <p>${escapeHtml(question)}</p>
-        `;
+        const heading = document.createElement('h3');
+        heading.textContent = `Question ${index + 1}`;
 
+        const row = document.createElement('div');
+        row.className = 'question-row';
+
+        const text = document.createElement('p');
+        text.textContent = question; // textContent escapes automatically
+
+        const listenBtn = document.createElement('button');
+        listenBtn.type = 'button';
+        listenBtn.className = 'btn-listen';
+        listenBtn.textContent = '\uD83D\uDD0A Listen';
+        // Close over the raw (unescaped) question text directly, rather than
+        // reading it back from the DOM, so nothing needs re-parsing
+        listenBtn.addEventListener('click', () => playQuestionAudio(question, listenBtn));
+
+        row.appendChild(text);
+        row.appendChild(listenBtn);
+
+        questionItem.appendChild(heading);
+        questionItem.appendChild(row);
         questionsList.appendChild(questionItem);
     });
 
     // Show results container
     resultsContainer.classList.remove('hidden');
+}
+
+/**
+ * Request speech audio for a question from the Netlify function and play it.
+ * Talks to ElevenLabs' Text-to-Speech API through a serverless proxy, the
+ * same pattern used for Gemini: the API key never reaches the browser.
+ */
+async function playQuestionAudio(questionText, buttonEl) {
+    const originalLabel = buttonEl.textContent;
+    buttonEl.disabled = true;
+    buttonEl.textContent = 'Loading...';
+
+    try {
+        stopCurrentAudio();
+
+        const response = await fetch(SPEECH_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: questionText })
+        });
+
+        if (!response.ok) {
+            let message = 'Could not play audio. Please try again.';
+            try {
+                const data = await response.json();
+                if (data.error) message = data.error;
+            } catch (_) {
+                // Response wasn't JSON (e.g. a raw error page) - keep default message
+            }
+            throw new Error(message);
+        }
+
+        const audioBlob = await response.blob();
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        currentAudio = audio;
+
+        buttonEl.textContent = '\u23F8 Playing...';
+
+        const resetButton = () => {
+            buttonEl.textContent = originalLabel;
+            buttonEl.disabled = false;
+            URL.revokeObjectURL(audioUrl);
+            if (currentAudio === audio) currentAudio = null;
+        };
+
+        audio.addEventListener('ended', resetButton);
+        audio.addEventListener('error', resetButton);
+
+        await audio.play();
+    } catch (error) {
+        buttonEl.textContent = 'Error - retry';
+        buttonEl.disabled = false;
+        console.error('Speech playback error:', error.message);
+        setTimeout(() => {
+            buttonEl.textContent = originalLabel;
+        }, 2500);
+    }
+}
+
+/**
+ * Stop and clean up whatever audio is currently playing, if anything
+ */
+function stopCurrentAudio() {
+    if (currentAudio) {
+        currentAudio.pause();
+        currentAudio = null;
+    }
 }
 
 /**
